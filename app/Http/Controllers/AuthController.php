@@ -21,7 +21,7 @@ class AuthController extends Controller
         $user = User::create([
             'name'     => $validated['name'],
             'email'    => $validated['email'],
-            'password' => Hash::make($validated['password']),
+            'password' => $validated['password'],
         ]);
 
         $token = $user->createToken('auth-token')->plainTextToken;
@@ -38,7 +38,11 @@ class AuthController extends Controller
 
         $user = User::where('email', $request->email)->first();
 
-        if (! $user || ! Hash::check($request->password, $user->password)) {
+        // Hash::check always runs to prevent timing-based email enumeration.
+        // The dummy is a real bcrypt hash so password_verify does full work.
+        $dummy = '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi';
+
+        if (! Hash::check($request->password, $user?->password ?? $dummy) || ! $user) {
             return response()->json(
                 ['message' => 'The provided credentials are incorrect.'],
                 422
@@ -52,7 +56,7 @@ class AuthController extends Controller
 
     public function logout(Request $request): JsonResponse
     {
-        $request->user()->currentAccessToken()->delete();
+        $request->user()->tokens()->delete();
 
         return response()->json(null, 204);
     }

@@ -17,13 +17,14 @@ class AuthTest extends TestCase
 
     public function test_registration_creates_a_user(): void
     {
-        $this->postJson('/api/auth/register', [
+        $response = $this->postJson('/api/auth/register', [
             'name'                  => 'Alice',
             'email'                 => 'alice@example.com',
             'password'              => 'secret123',
             'password_confirmation' => 'secret123',
         ]);
 
+        $response->assertStatus(201);
         $this->assertDatabaseHas('users', ['email' => 'alice@example.com']);
     }
 
@@ -64,6 +65,56 @@ class AuthTest extends TestCase
 
         $this->assertNotEquals('secret123', $user->password);
         $this->assertTrue(Hash::check('secret123', $user->password));
+    }
+
+    public function test_registration_fails_when_password_confirmation_does_not_match(): void
+    {
+        $response = $this->postJson('/api/auth/register', [
+            'name'                  => 'Alice',
+            'email'                 => 'alice@example.com',
+            'password'              => 'secret123',
+            'password_confirmation' => 'different',
+        ]);
+
+        $response->assertStatus(422);
+    }
+
+    public function test_registration_fails_when_email_is_already_taken(): void
+    {
+        User::factory()->create(['email' => 'alice@example.com']);
+
+        $response = $this->postJson('/api/auth/register', [
+            'name'                  => 'Alice',
+            'email'                 => 'alice@example.com',
+            'password'              => 'secret123',
+            'password_confirmation' => 'secret123',
+        ]);
+
+        $response->assertStatus(422);
+    }
+
+    public function test_registration_fails_when_password_is_too_short(): void
+    {
+        $response = $this->postJson('/api/auth/register', [
+            'name'                  => 'Alice',
+            'email'                 => 'alice@example.com',
+            'password'              => 'short',
+            'password_confirmation' => 'short',
+        ]);
+
+        $response->assertStatus(422);
+    }
+
+    public function test_registration_fails_when_email_is_invalid(): void
+    {
+        $response = $this->postJson('/api/auth/register', [
+            'name'                  => 'Alice',
+            'email'                 => 'not-an-email',
+            'password'              => 'secret123',
+            'password_confirmation' => 'secret123',
+        ]);
+
+        $response->assertStatus(422);
     }
 
     // -------------------------------------------------------------------------
