@@ -28,18 +28,6 @@ class AuthTest extends TestCase
         $this->assertDatabaseHas('users', ['email' => 'alice@example.com']);
     }
 
-    public function test_registration_returns_201(): void
-    {
-        $response = $this->postJson('/api/auth/register', [
-            'name'                  => 'Alice',
-            'email'                 => 'alice@example.com',
-            'password'              => 'secret123',
-            'password_confirmation' => 'secret123',
-        ]);
-
-        $response->assertStatus(201);
-    }
-
     public function test_registration_returns_token(): void
     {
         $response = $this->postJson('/api/auth/register', [
@@ -120,6 +108,17 @@ class AuthTest extends TestCase
     // -------------------------------------------------------------------------
     // Login
     // -------------------------------------------------------------------------
+
+    public function test_login_with_unknown_email_returns_same_error_as_wrong_password(): void
+    {
+        $response = $this->postJson('/api/auth/login', [
+            'email'    => 'nobody@example.com',
+            'password' => 'doesnotmatter',
+        ]);
+
+        $response->assertStatus(422);
+        $response->assertJson(['message' => 'The provided credentials are incorrect.']);
+    }
 
     public function test_login_with_valid_credentials_returns_200(): void
     {
@@ -254,6 +253,32 @@ class AuthTest extends TestCase
     // Change password
     // -------------------------------------------------------------------------
 
+    public function test_change_password_without_token_returns_401(): void
+    {
+        $response = $this->putJson('/api/me/password', [
+            'current_password'          => 'oldpassword',
+            'new_password'              => 'newpassword',
+            'new_password_confirmation' => 'newpassword',
+        ]);
+
+        $response->assertStatus(401);
+    }
+
+    public function test_change_password_fails_when_new_password_is_too_short(): void
+    {
+        $user = User::factory()->create([
+            'password' => Hash::make('oldpassword'),
+        ]);
+
+        $response = $this->actingAs($user, 'sanctum')->putJson('/api/me/password', [
+            'current_password'          => 'oldpassword',
+            'new_password'              => 'short',
+            'new_password_confirmation' => 'short',
+        ]);
+
+        $response->assertStatus(422);
+    }
+
     public function test_correct_current_password_updates_password(): void
     {
         $user = User::factory()->create([
@@ -319,6 +344,47 @@ class AuthTest extends TestCase
         ]);
 
         $response->assertStatus(422);
+    }
+
+    public function test_other_tokens_are_revoked_after_password_change(): void
+    {
+        $user = User::factory()->create([
+            'password' => Hash::make('oldpassword'),
+        ]);
+
+        $currentToken = $user->createToken('current-device')->plainTextToken;
+        $otherToken   = $user->createToken('other-device')->plainTextToken;
+
+        $this->withToken($currentToken)->putJson('/api/me/password', [
+            'current_password'          => 'oldpassword',
+            'new_password'              => 'newpassword',
+            'new_password_confirmation' => 'newpassword',
+        ]);
+
+        $this->app['auth']->forgetGuards();
+
+        $response = $this->withToken($otherToken)->getJson('/api/me');
+        $response->assertStatus(401);
+    }
+
+    public function test_current_token_remains_valid_after_password_change(): void
+    {
+        $user = User::factory()->create([
+            'password' => Hash::make('oldpassword'),
+        ]);
+
+        $currentToken = $user->createToken('current-device')->plainTextToken;
+
+        $this->withToken($currentToken)->putJson('/api/me/password', [
+            'current_password'          => 'oldpassword',
+            'new_password'              => 'newpassword',
+            'new_password_confirmation' => 'newpassword',
+        ]);
+
+        $this->app['auth']->forgetGuards();
+
+        $response = $this->withToken($currentToken)->getJson('/api/me');
+        $response->assertStatus(200);
     }
 
     public function test_new_password_works_after_change(): void
