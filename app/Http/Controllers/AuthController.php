@@ -38,11 +38,13 @@ class AuthController extends Controller
 
         $user = User::where('email', $request->email)->first();
 
-        // Hash::check always runs to prevent timing-based email enumeration.
-        // The dummy is a real bcrypt hash so password_verify does full work.
-        $dummy = '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi';
+        // Hash::check always runs to prevent timing-based email enumeration;
+        // the dummy is a real bcrypt hash so password_verify does full work
+        // even when $user is null.
+        $dummy          = '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi';
+        $passwordMatches = Hash::check($request->password, $user?->password ?? $dummy);
 
-        if (! Hash::check($request->password, $user?->password ?? $dummy) || ! $user) {
+        if (! $user || ! $passwordMatches) {
             return response()->json(
                 ['message' => 'The provided credentials are incorrect.'],
                 422

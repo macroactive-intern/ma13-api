@@ -39,9 +39,9 @@ class MeController extends Controller
         $user->password = $request->new_password;
         $user->save();
 
-        // Invalidate all other sessions so a compromised token can't outlive a password reset.
-        $request->user()->tokens()
-            ->where('id', '!=', $request->user()->currentAccessToken()->id)
+        // Invalidate all other sessions so a compromised token can't outlive a password change.
+        $user->tokens()
+            ->where('id', '!=', $user->currentAccessToken()->id)
             ->delete();
 
         return response()->json(['message' => 'Password updated successfully.']);
